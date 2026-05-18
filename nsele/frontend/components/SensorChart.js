@@ -45,6 +45,7 @@ export default function SensorChart({ data }) {
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { position: 'top' } },
         scales: { x: { display: true }, y: { display: true } },
       },
@@ -52,5 +53,5 @@ export default function SensorChart({ data }) {
     return () => chartInstance.current?.destroy()
   }, [data])
 
-  return <canvas ref={chartRef} height={220} />
+  return <canvas ref={chartRef} />
 }

@@ -53,25 +53,33 @@ export default function Dashboard() {
       </div>
       
       {currentGh ? (
-        <div className="dashboard-content">
-          <div className="hero" style={{ padding: 20, marginBottom: 20 }}>
-            <h2 style={{ margin: '0 0 8px' }}>{currentGh.name}</h2>
-            <p className="subtle" style={{ margin: 0 }}>Culture actuelle: {currentGh.culture}</p>
+        <div className="bento-dashboard">
+          
+          {/* Colonne de Gauche : Vue d'ensemble et Graphique */}
+          <div className="bento-left">
+            <div className="hero" style={{ padding: 20, marginBottom: 20 }}>
+              <h2 style={{ margin: '0 0 8px' }}>{currentGh.name}</h2>
+              <p className="subtle" style={{ margin: 0 }}>Culture actuelle: {currentGh.culture}</p>
+            </div>
+            
+            <div className="card chart-card" style={{ height: '100%', minHeight: 400 }}>
+              <h3 style={{marginTop: 0, marginBottom: 16}}>Évolution Globale (Moyenne)</h3>
+              <div style={{ position: 'relative', height: 'calc(100% - 40px)' }}>
+                <SensorChart data={history} />
+              </div>
+            </div>
           </div>
           
-          <div className="compartments-row" style={{marginBottom: 32}}>
-            {/* Nous affichons les 4 compartiments pour la serre sélectionnée. 
-                L'id de la serre (ex: S1) et l'id du compartiment (ex: C1) sont envoyés au composant */}
-            <CompartmentCard greenhouseId={selectedId} compId="C1" compName="Compartiment 1" />
-            <CompartmentCard greenhouseId={selectedId} compId="C2" compName="Compartiment 2" />
-            <CompartmentCard greenhouseId={selectedId} compId="C3" compName="Compartiment 3" />
-            <CompartmentCard greenhouseId={selectedId} compId="C4" compName="Compartiment 4" />
+          {/* Colonne de Droite : Les 4 Compartiments */}
+          <div className="bento-right">
+            <div className="compartments-grid">
+              <CompartmentCard greenhouseId={selectedId} compId="C1" compName="Compartiment 1" />
+              <CompartmentCard greenhouseId={selectedId} compId="C2" compName="Compartiment 2" />
+              <CompartmentCard greenhouseId={selectedId} compId="C3" compName="Compartiment 3" />
+              <CompartmentCard greenhouseId={selectedId} compId="C4" compName="Compartiment 4" />
+            </div>
           </div>
 
-          <div className="card">
-            <h3 style={{marginTop: 0, marginBottom: 16}}>Évolution Globale (Moyenne de la Serre)</h3>
-            <SensorChart data={history} />
-          </div>
         </div>
       ) : (
         <div className="page-card">Chargement ou aucune serre trouvée...</div>
