@@ -20,11 +20,11 @@ def on_message(client, userdata, msg):
 
     # Normalisation des clés contenant des slashes (ex: "S1/C1/TA" -> "S1C1TA")
     if isinstance(data, dict):
-        data = {k.replace('/', ''): v for k, v in data.items()}
+        data = {k.replace('/', ''): v for k, v in data.items()} # creation d'une nouvelle dict avec les clés normalisées 
 
-    # Exemple de topic attendu : nsele/raw_sensors/S1/C1
+    # Exemple de topic attendu : {"s1/c1":{"ta": 25.5, "hu": 60.2,"ts":20.0,"hs":55.0}}"}
     parts = msg.topic.split('/')
-    if len(parts) >= 4:
+    if len(parts) >= 2:
         gh_id = parts[2]
         comp_id = parts[3]
         
@@ -61,3 +61,5 @@ def mqtt_start():
         print(f"AVERTISSEMENT : Impossible de se connecter au broker MQTT sur {MQTT_BROKER}:{MQTT_PORT}. Assurez-vous que Mosquitto est lance.")
     except Exception as e:
         print(f"Erreur MQTT : {e}")
+
+
