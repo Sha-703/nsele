@@ -1,16 +1,13 @@
 import json
 import paho.mqtt.client as mqtt
-from backend.processing.processor import process_sensor_data
+from backend.processing.processor import process_raw_sensor_message
 
 MQTT_BROKER = 'localhost' # Le IPV de la machine ici nous sommess en locale
 MQTT_PORT = 1883
 client = mqtt.Client() # creation client
 
-# Connexion entre Backend et les Capteur pour envoyer les données dans le frontend
-# On s'abonne aux données brutes des capteurs pour les traiter et les envoyer au frontend
 def on_connect(client, userdata, flags, rc):
     print('MQTT connected with result code', rc)
-    # Le backend s'abonne uniquement aux données brutes des capteurs
     client.subscribe('nsele/raw_sensors/#')
 
 def on_message(client, userdata, msg):
@@ -19,9 +16,38 @@ def on_message(client, userdata, msg):
         data = json.loads(payload)
     except Exception:
         data = {'raw': msg.payload.decode()}
-    result = process_sensor_data(data)
-    if result.get('command'):
-        client.publish(f"nsele/actuators/{result['target']}", json.dumps(result['command']))
+
+
+    # Normalisation des clés contenant des slashes (ex: "S1/C1/TA" -> "S1C1TA")
+    if isinstance(data, dict):
+        data = {k.replace('/', ''): v for k, v in data.items()}
+
+    # Exemple de topic attendu : nsele/raw_sensors/S1/C1
+    parts = msg.topic.split('/')
+    if len(parts) >= 4:
+        gh_id = parts[2]
+        comp_id = parts[3]
+        
+        # Déléguer tout le traitement logique, stockage de données et calcul de moyennes au processeur
+        result = process_raw_sensor_message(gh_id, comp_id, data)
+
+        # Si le processeur décide d'activer un actionneur global pour la serre
+        if result.get('command'):
+            actuator_topic = f"nsele/actuators/{gh_id}"
+            client.publish(actuator_topic, json.dumps(result['command']))
+            print(f"[DECISION BACKEND MOYENNES] Commande envoyee sur {actuator_topic} : {result['command']}")
+
+        # Republier la donnée brute validée sur le topic écouté par le frontend
+        processed_topic = msg.topic.replace("nsele/raw_sensors/", "nsele/sensors/")
+        client.publish(processed_topic, json.dumps(data))
+        print(f"[ROUTAGE BACKEND] Donnee brute recue sur {msg.topic} -> Transmise au Frontend sur {processed_topic}")
+
+        # Publier aussi les moyennes calculées par le processeur pour le Dashboard
+        if result.get('averages'):
+            avg_topic = f"nsele/sensors/{gh_id}/averages"
+            client.publish(avg_topic, json.dumps(result['averages']))
+            print(f"[MOYENNES BACKEND] Moyennes de la serre {gh_id} publiees sur {avg_topic} : {result['averages']}")
+
 
 def mqtt_start():
     client.on_connect = on_connect
