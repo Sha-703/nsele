@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nsele - Paramètres des Serres</title>
+    <!-- Styles custom -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <div>
+                <p class="eyebrow">Nsele</p>
+                <h2>Serre connectée</h2>
+            </div>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/settings" style="text-decoration: underline; color: white;">Paramètres</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="page-card">
+                <h1 style="margin-top: 0;">Paramètres des Serres</h1>
+                <p class="subtle" style="margin-bottom: 24px;">Modifiez la culture assignée à chaque serre.</p>
+                
+                <form id="settings-form" class="form-grid" style="max-width: 400px;">
+                    <label>
+                        Choisir la serre
+                        <select id="greenhouse-select">
+                            <!-- Rempli dynamiquement -->
+                        </select>
+                    </label>
+                    
+                    <label>
+                        Nouvelle Culture
+                        <select id="culture-select">
+                            <option value="Tomates">Tomates</option>
+                            <option value="Poivrons">Poivrons</option>
+                            <option value="Laitue">Laitue</option>
+                            <option value="Fraises">Fraises</option>
+                            <option value="Aubergines">Aubergines</option>
+                        </select>
+                    </label>
+                    
+                    <button type="submit" class="btn-primary" style="margin-top: 10px;">Enregistrer la modification</button>
+                </form>
+                
+                <p id="success-message" class="success" style="display: none;"></p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script Settings -->
+    <script src="{{ url_for('static', filename='settings.js') }}"></script>
+</body>
+</html>
+
