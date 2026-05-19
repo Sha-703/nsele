@@ -3,6 +3,7 @@ def process_sensor_data(data: dict) -> dict:
     greenhouse = data.get('greenhouse', 'gh1')
     try:
         humidity = float(data.get('humidity', 0))
+        print(f" data a cette forme {data}")
     except Exception:
         humidity = None
 
