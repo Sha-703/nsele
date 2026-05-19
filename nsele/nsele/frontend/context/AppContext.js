@@ -17,11 +17,15 @@ export function AppProvider({ children }) {
   const [greenhouses, setGreenhouses] = useState([])
 
   useEffect(() => {
-    getGreenhouses().then((data) => {
-      if (Array.isArray(data)) {
-        setGreenhouses(data)
-      }
-    })
+    getGreenhouses()
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setGreenhouses(data)
+        }
+      })
+      .catch((error) => {
+        console.error('Impossible de charger les serres :', error)
+      })
   }, [])
 
   useEffect(() => {
