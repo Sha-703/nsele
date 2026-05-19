@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, redirect
+from flask import Flask, render_template
 from flask_cors import CORS
 from backend.views.greenhouse import bp as greenhouse_bp
 from backend.views.actuator import bp as actuator_bp
@@ -13,8 +13,12 @@ CORS(app)
 
 @app.route('/')
 def home():
-    # Redirige automatiquement vers le Dashboard Next.js
-    return redirect("http://localhost:3000", code=302)
+    return render_template('dashboard.html')
+
+@app.route('/settings')
+def settings():
+    return render_template('settings.html')
+
 
 # Enregistrer les blueprints
 app.register_blueprint(greenhouse_bp)

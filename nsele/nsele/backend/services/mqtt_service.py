@@ -6,23 +6,22 @@ MQTT_BROKER = 'localhost' # Le IPV de la machine ici nous sommess en locale
 MQTT_PORT = 1883
 client = mqtt.Client() # creation client
 
+# Connexion entre Backend et les Capteur pour envoyer les données dans le frontend
+# On s'abonne aux données brutes des capteurs pour les traiter et les envoyer au frontend
 def on_connect(client, userdata, flags, rc):
     print('MQTT connected with result code', rc)
-    client.subscribe('nsele/sensors/#')
+    # Le backend s'abonne uniquement aux données brutes des capteurs
+    client.subscribe('nsele/raw_sensors/#')
 
 def on_message(client, userdata, msg):
     try:
         payload = msg.payload.decode() # pour lire les information
         data = json.loads(payload)
-        
-    except Exception as e:
-        data = {'raw': msg.payload.decode()} # en cas de probleme 
-        print(f"Erreur lors du traitement du message : {e}")
-        
-    result = process_sensor_data(data) # nous passon l'analyse des donnees ici
-
+    except Exception:
+        data = {'raw': msg.payload.decode()}
+    result = process_sensor_data(data)
     if result.get('command'):
-        client.publish(f"nsele/actuators/{result['target']}", json.dumps(result['command'])) # Pour publier les informations 
+        client.publish(f"nsele/actuators/{result['target']}", json.dumps(result['command']))
 
 def mqtt_start():
     client.on_connect = on_connect
