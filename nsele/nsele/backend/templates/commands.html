@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nsele - Commandes Manuelles</title>
+    <!-- MQTT.js -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <!-- Styles custom -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .commands-container {
+            max-width: 600px;
+            margin: 40px auto;
+        }
+        .actuator-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: rgba(241, 245, 249, 0.6);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(226, 232, 240, 0.6);
+        }
+        .actuator-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .actuator-icon {
+            font-size: 2rem;
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-actuate {
+            padding: 10px 18px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-on {
+            background: #059669;
+            color: white;
+        }
+        .btn-on:hover {
+            background: #047857;
+            transform: translateY(-1px);
+        }
+        .btn-off {
+            background: #64748b;
+            color: white;
+        }
+        .btn-off:hover {
+            background: #475569;
+            transform: translateY(-1px);
+        }
+        .badge-status {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 4px;
+        }
+        .status-off {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .status-on {
+            background: #d1fae5;
+            color: #065f46;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <div>
+                <p class="eyebrow">Nsele</p>
+                <h2>Serre connectée - Commandes</h2>
+            </div>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/commande" style="text-decoration: underline; color: white;">Commandes</a>
+                <a href="/settings">Paramètres</a>
+            </nav>
+        </header>
+
+        <main style="padding: 0 24px;">
+            <div class="card commands-container">
+                <h2 style="margin-top: 0; margin-bottom: 6px;">Contrôle Manuel des Serres</h2>
+                <p class="subtle" style="margin-bottom: 24px;">Sélectionnez une serre pour forcer l'état des actionneurs (Pompe et Cooling).</p>
+
+                <!-- Sélection de la Serre -->
+                <div class="form-grid" style="margin-bottom: 28px;">
+                    <label>
+                        Choisir la serre à commander
+                        <select id="commands-gh-select" style="width: 100%; font-size: 1.1rem; padding: 10px;">
+                            <!-- Rempli dynamiquement -->
+                        </select>
+                    </label>
+                    <p class="subtle">Culture active sur cette serre : <strong id="commands-culture-name" style="color: #0f172a;">--</strong></p>
+                </div>
+
+                <!-- Actionneurs -->
+                <div>
+                    <!-- Arrosage -->
+                    <div class="actuator-card">
+                        <div class="actuator-info">
+                            <span class="actuator-icon">💧</span>
+                            <div>
+                                <h3 style="margin: 0;">Arrosage (Pompe)</h3>
+                                <span id="status-pump" class="badge-status status-off">Arrêté</span>
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-actuate btn-on" onclick="sendActuatorCommand('pump', 'on')">Activer</button>
+                            <button class="btn-actuate btn-off" onclick="sendActuatorCommand('pump', 'off')">Désactiver</button>
+                        </div>
+                    </div>
+
+                    <!-- Refroidissement -->
+                    <div class="actuator-card">
+                        <div class="actuator-info">
+                            <span class="actuator-icon">❄️</span>
+                            <div>
+                                <h3 style="margin: 0;">Refroidissement (Cooling)</h3>
+                                <span id="status-cooling" class="badge-status status-off">Arrêté</span>
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-actuate btn-on" onclick="sendActuatorCommand('cooling', 'on')">Activer</button>
+                            <button class="btn-actuate btn-off" onclick="sendActuatorCommand('cooling', 'off')">Désactiver</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Toast -->
+            <div id="toast-message" class="card" style="display: none; position: fixed; bottom: 24px; right: 24px; background: #065f46; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15); z-index: 1000; border: none; padding: 16px 24px;">
+                <!-- Rempli dynamiquement -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Script Commands JS -->
+    <script src="{{ url_for('static', filename='commands.js') }}"></script>
+</body>
+</html>

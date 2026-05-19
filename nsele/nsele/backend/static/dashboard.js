@@ -10,6 +10,7 @@ let chartInterval = null;
 const greenhouseBar = document.getElementById('greenhouse-bar');
 const dashboardContent = document.getElementById('dashboard-content');
 const loadingCard = document.getElementById('loading-card');
+const emptyCard = document.getElementById('empty-card');
 const ghTitle = document.getElementById('gh-title');
 const ghCulture = document.getElementById('gh-culture');
 const compartmentsContainer = document.getElementById('compartments-container');
@@ -71,15 +72,22 @@ async function fetchGreenhouses() {
         if (!response.ok) throw new Error('Erreur API');
         greenhouses = await response.json();
         
+        loadingCard.style.display = 'none';
+        
         if (greenhouses.length > 0) {
+            emptyCard.style.display = 'none';
+            dashboardContent.style.display = 'grid';
             renderGreenhouseBar();
             selectGreenhouse(selectedId || greenhouses[0].id);
-            loadingCard.style.display = 'none';
-            dashboardContent.style.display = 'grid';
+        } else {
+            emptyCard.style.display = 'block';
+            dashboardContent.style.display = 'none';
+            greenhouseBar.innerHTML = '<div style="color: rgba(255,255,255,0.7); font-style: italic; padding: 10px 16px;">Aucune serre configurée</div>';
         }
     } catch (error) {
         console.error("Erreur de récupération des serres :", error);
         loadingCard.textContent = "Erreur de connexion au backend. Veuillez actualiser.";
+        loadingCard.style.display = 'block';
     }
 }
 
@@ -117,6 +125,12 @@ function selectGreenhouse(id) {
         ghCulture.textContent = currentGh.culture;
     }
 
+    // Reset averages elements
+    updateDOMVal('avg-TA', '--');
+    updateDOMVal('avg-TS', '--');
+    updateDOMVal('avg-HA', '--');
+    updateDOMVal('avg-HS', '--');
+
     // Render compartments
     renderCompartments();
     
@@ -135,16 +149,23 @@ function getVal(sensor, compId) {
     return mqttData[key] !== undefined ? mqttData[key] : '--';
 }
 
-// Render Compartments
+// Render Compartments (without control buttons)
 function renderCompartments() {
     compartmentsContainer.innerHTML = '';
-    for (let i = 1; i <= 4; i++) {
-        const compId = `C${i}`;
+    const currentGh = greenhouses.find(g => g.id === selectedId);
+    const comps = currentGh && currentGh.compartments ? currentGh.compartments : [];
+    
+    if (comps.length === 0) {
+        compartmentsContainer.innerHTML = '<div class="card" style="grid-column: span 2; text-align: center; padding: 40px; color: #64748b;">Aucun compartiment configuré pour cette serre. Rendez-vous dans les paramètres pour en ajouter !</div>';
+        return;
+    }
+    
+    comps.forEach(compId => {
         const card = document.createElement('article');
         card.className = 'card compartment-card';
         card.innerHTML = `
             <div class="card-header" style="margin-bottom: 12px;">
-                <h3>Compartiment ${i}</h3>
+                <h3>Compartiment ${compId}</h3>
                 <span class="badge" id="${selectedId}-${compId}-status">Actif</span>
             </div>
             
@@ -178,14 +199,9 @@ function renderCompartments() {
                     </div>
                 </div>
             </div>
-            
-            <div class="controls-row">
-                <button type="button" class="btn-primary" onclick="sendCommand('${selectedId}', '${compId}', 'arrosage')">💧 Arrosage</button>
-                <button type="button" class="btn-secondary" onclick="sendCommand('${selectedId}', '${compId}', 'cooling')">❄️ Cooling</button>
-            </div>
         `;
         compartmentsContainer.appendChild(card);
-    }
+    });
 }
 
 // Update single DOM element safely
@@ -196,20 +212,53 @@ function updateDOMVal(id, val) {
 
 // Refresh all values on screen
 function refreshSensorUI() {
-    for (let i = 1; i <= 4; i++) {
-        const compId = `C${i}`;
-        updateDOMVal(`${selectedId}-${compId}-TA`, getVal('TA', compId));
-        updateDOMVal(`${selectedId}-${compId}-TS`, getVal('TS', compId));
-        updateDOMVal(`${selectedId}-${compId}-HA`, getVal('HA', compId));
-        updateDOMVal(`${selectedId}-${compId}-HS`, getVal('HS', compId));
-    }
+    const currentGh = greenhouses.find(g => g.id === selectedId);
+    const comps = currentGh && currentGh.compartments ? currentGh.compartments : [];
+    
+    let sumTA = 0, countTA = 0;
+    let sumTS = 0, countTS = 0;
+    let sumHA = 0, countHA = 0;
+    let sumHS = 0, countHS = 0;
+
+    comps.forEach(compId => {
+        const valTA = getVal('TA', compId);
+        const valTS = getVal('TS', compId);
+        const valHA = getVal('HA', compId);
+        const valHS = getVal('HS', compId);
+
+        updateDOMVal(`${selectedId}-${compId}-TA`, valTA);
+        updateDOMVal(`${selectedId}-${compId}-TS`, valTS);
+        updateDOMVal(`${selectedId}-${compId}-HA`, valHA);
+        updateDOMVal(`${selectedId}-${compId}-HS`, valHS);
+
+        if (valTA !== '--') { sumTA += parseFloat(valTA); countTA++; }
+        if (valTS !== '--') { sumTS += parseFloat(valTS); countTS++; }
+        if (valHA !== '--') { sumHA += parseFloat(valHA); countHA++; }
+        if (valHS !== '--') { sumHS += parseFloat(valHS); countHS++; }
+    });
+
+    // Mettre à jour la carte des moyennes de la serre sur le frontend
+    updateDOMVal('avg-TA', countTA > 0 ? (sumTA / countTA).toFixed(1) : '--');
+    updateDOMVal('avg-TS', countTS > 0 ? (sumTS / countTS).toFixed(1) : '--');
+    updateDOMVal('avg-HA', countHA > 0 ? (sumHA / countHA).toFixed(1) : '--');
+    updateDOMVal('avg-HS', countHS > 0 ? (sumHS / countHS).toFixed(1) : '--');
 }
 
-// Update Chart Data (Average of all 4 compartments)
+// Update Averages Card (fallback ou déclenchement direct depuis MQTT)
+function updateAveragesUI(msg) {
+    updateDOMVal('avg-TA', msg.TA !== undefined ? msg.TA : '--');
+    updateDOMVal('avg-TS', msg.TS !== undefined ? msg.TS : '--');
+    updateDOMVal('avg-HA', msg.HA !== undefined ? msg.HA : '--');
+    updateDOMVal('avg-HS', msg.HS !== undefined ? msg.HS : '--');
+}
+
+// Update Chart Data (Average of all compartments)
 function updateChartData() {
+    const currentGh = greenhouses.find(g => g.id === selectedId);
+    const comps = currentGh && currentGh.compartments ? currentGh.compartments : [];
+    
     let TA = 0, TS = 0, HA = 0, HS = 0, count = 0;
-    for (let i = 1; i <= 4; i++) {
-        const compId = `C${i}`;
+    comps.forEach(compId => {
         const keyTA = `${selectedId}${compId}TA`;
         const keyTS = `${selectedId}${compId}TS`;
         const keyHA = `${selectedId}${compId}HA`;
@@ -222,7 +271,7 @@ function updateChartData() {
             HS += parseFloat(mqttData[keyHS]);
             count++;
         }
-    }
+    });
 
     let pt;
     const timeStr = new Date().toLocaleTimeString();
@@ -255,44 +304,6 @@ function updateChartData() {
     }
 }
 
-// Send Command to Backend API
-function sendCommand(ghId, compId, action) {
-    const payload = action === 'arrosage' ? { pump: 'on' } : { cooling: 'on' };
-    
-    fetch(`/api/greenhouses/${ghId}/commands`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            compId: compId,
-            command: payload
-        })
-    })
-    .then(res => {
-        if (!res.ok) throw new Error('API Error');
-        return res.json();
-    })
-    .then(data => {
-        console.log('Commande relayee par le backend :', data);
-        const badge = document.getElementById(`${ghId}-${compId}-status`);
-        if (badge) {
-            badge.textContent = action === 'arrosage' ? 'Arrosage...' : 'Refroidissement...';
-            badge.style.background = action === 'arrosage' ? '#d1fae5' : '#dbeafe';
-            badge.style.color = action === 'arrosage' ? '#065f46' : '#1e40af';
-            
-            setTimeout(() => {
-                badge.textContent = 'Actif';
-                badge.style.background = '#ede9fe';
-                badge.style.color = '#5b21b6';
-            }, 3000);
-        }
-    })
-    .catch(error => {
-        console.error("Erreur d'envoi de la commande :", error);
-    });
-}
-
 // Connect to MQTT Broker via Websockets on 9001
 function initMQTT() {
     console.log("Connexion au broker MQTT...");
@@ -308,6 +319,16 @@ function initMQTT() {
         try {
             const msg = JSON.parse(payload.toString());
             console.log(`MQTT Recu sur [${topic}]:`, msg);
+            
+            const parts = topic.split('/');
+            if (parts.length >= 4 && parts[3] === 'averages') {
+                const ghId = parts[2];
+                if (ghId === selectedId) {
+                    updateAveragesUI(msg);
+                }
+                return; // Ne pas mélanger avec les données brutes de compartiments
+            }
+
             mqttData = { ...mqttData, ...msg };
             refreshSensorUI();
         } catch (e) {
