@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS compartiment (
 
 
 # création du curseur
-curseur = connexion.cursor()
+curseur = connexion.cursor() # Le curseur est utilisé pour exécuter des commandes SQL sur la base de données
 print("Base de données créée avec succès !")
 # création des tables dans le bon ordre pour les clés étrangères
 curseur.execute(table_culture)

@@ -10,6 +10,7 @@ from backend.views.greenhouse import bp as greenhouse_bp
 from backend.views.actuator import bp as actuator_bp
 from backend.views.culture import bp as culture_bp
 from backend.services.mqtt_service import mqtt_start
+from backend.processing.processor import start_periodic_measure_save
 
 # Initialisation de l'application Flask
 app = Flask(__name__)
@@ -44,5 +45,7 @@ app.register_blueprint(culture_bp)
 if __name__ == '__main__':
     # Démarrage du client MQTT en tâche de fond
     mqtt_start()
+    # Démarrage de l'enregistrement périodique des mesures en base toutes les 10 minutes
+    start_periodic_measure_save(600)
     # Démarrage du serveur Flask sur le port 5000
     app.run(host='0.0.0.0', port=5000, debug=True)
