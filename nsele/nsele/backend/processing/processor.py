@@ -14,6 +14,11 @@ from backend.models.db import load_data
 latest_sensor_data = {}
 latest_sensor_lock = threading.Lock()
 
+# Cache des moyennes et de l'état des actionneurs pour chaque serre
+latest_averages = {}
+averages_history = {}
+latest_actuator_states = {}
+
 
 def get_latest_sensor_file_path() -> str:
     """Retourne le chemin local du fichier JSON de persistance des données capteurs."""
@@ -26,7 +31,7 @@ def load_latest_sensor_data_from_json() -> dict:
     if not os.path.exists(path):
         return {}
 
-<<<<<<< Updated upstream
+
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f) # lire les valeur des sauvegarder 
@@ -195,59 +200,6 @@ def compute_greenhouse_averages(gh_id: str) -> dict | None:
     comp_keys = [k for k in snapshot.keys() if k.startswith(f"{gh_id}/")]
     if not comp_keys:
         return None
-=======
-# Mémoire globale pour stocker les dernières moyennes calculées de chaque serre
-# Clé : "S1", Valeur : {"TA": 24.0, "TS": 20.0, ...}
-latest_averages = {}
-
-# Mémoire globale pour stocker l'état actuel des actionneurs de chaque serre
-# Clé : "S1", Valeur : {"pump": "off", "cooling": "off"}
-latest_actuator_states = {}
-
-# Historique des moyennes de chaque serre (pour persister le graphique au rafraîchissement)
-# Clé : "S1", Valeur : Liste de max 20 points [{'time': '12:00:00', 'TA': 24.0, ...}]
-averages_history = {}
-
-def process_raw_sensor_message(gh_id: str, comp_id: str, data: dict) -> dict:
-    """
-    Met à jour les données du compartiment, calcule les moyennes de la serre, 
-    et prend des décisions d'automatisation basées sur les seuils de culture.
-    
-    Retourne : {
-        'averages': {'greenhouse': gh_id, 'TA': ..., 'TS': ..., 'HA': ..., 'HS': ...},
-        'command': {'pump': 'on/off', 'cooling': 'on/off'}  # ou {}
-    }
-    """
-    global latest_sensor_data
-    
-    target = f"{gh_id}/{comp_id}"
-    if target not in latest_sensor_data:
-        latest_sensor_data[target] = {}
-        
-    ta_key = f"{gh_id}{comp_id}TA"
-    ts_key = f"{gh_id}{comp_id}TS"
-    ha_key = f"{gh_id}{comp_id}HA"
-    hs_key = f"{gh_id}{comp_id}HS"
-    
-    try:
-        if ta_key in data: latest_sensor_data[target]['TA'] = float(data[ta_key])
-        if ts_key in data: latest_sensor_data[target]['TS'] = float(data[ts_key])
-        if ha_key in data: latest_sensor_data[target]['HA'] = float(data[ha_key])
-        if hs_key in data: latest_sensor_data[target]['HS'] = float(data[hs_key])
-        
-        # Enregistrer la mesure reçue dans la base de données historique SQLite
-        from backend.models.history_db import log_sensor_event
-        log_sensor_event(
-            gh_id,
-            comp_id,
-            latest_sensor_data[target].get('TA'),
-            latest_sensor_data[target].get('TS'),
-            latest_sensor_data[target].get('HA'),
-            latest_sensor_data[target].get('HS')
-        )
-    except (ValueError, TypeError) as e:
-        print(f"[PROCESSOR WARNING] Erreur conversion numerique : {e}")
->>>>>>> Stashed changes
 
     avg_data = {'greenhouse': gh_id}
     for sensor in ['ta', 'ts', 'ha', 'hs']:

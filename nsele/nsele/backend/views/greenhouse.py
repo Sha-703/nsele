@@ -1,10 +1,10 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template
 from backend.models.greenhouse import (
     get_all_greenhouses, update_greenhouse, create_greenhouse, delete_greenhouse,
     add_compartment, delete_compartment
 )
 
-# Définition du Blueprint pour les routes d'API des serres
+# Définition du Blueprint pour les routes d'API et les pages des serres
 bp = Blueprint('greenhouse', __name__)
 
 # Endpoint: Récupérer toutes les serres
@@ -111,3 +111,15 @@ def get_latest_state(gh_id):
         'actuators': actuators,
         'history': history
     })
+
+
+# Route de page: afficher la liste des serres via le template du dashboard
+@bp.route('/greenhouses', methods=['GET'])
+def greenhouse_list_page():
+    return render_template('dashboard.html')
+
+
+# Route de page: afficher le détail d'une serre via son template dédié
+@bp.route('/greenhouse/<gh_id>', methods=['GET'])
+def greenhouse_detail_page(gh_id):
+    return render_template('greenhouse_detail.html', gh_id=gh_id)

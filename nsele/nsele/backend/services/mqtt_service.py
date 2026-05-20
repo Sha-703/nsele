@@ -49,61 +49,47 @@ def on_message(client, userdata, msg):
     except Exception:
         data = {'raw': msg.payload.decode()}
 
-<<<<<<< Updated upstream
 
-    # Normalisation des clés contenant des slashes (ex: "S1/C1/TA" -> "S1C1TA")
-    if isinstance(data, dict):
-        data = {k.replace("/",'') : v for k, v in data.items()} # creation d'une nouvelle dict avec les clés normalisées 
 
-        # Exemple de topic attendu : {"s1/c1":{"ta": 25.5, "hu": 60.2,"ts":20.0,"hs":55.0}"}}
-        
-        clef = list(data.keys())[0] # Extrait la clé principale du message (ex: "s1/c1")
-        parts = clef.split('/') # Sépare la clé en parties (ex: ["s1", "c1"])
-        if len(parts) > 2:
-            gh_id = parts[0] # Extrait l'identifiant de la serre (ex: "s1")
-            comp_id = parts[1] # Extrait l'identifiant du compartiment (ex: "c1")
-        else:
-            print(f"Format de topic inattendu : {msg.topic}. Attendu 'nsele/raw_sensors/<gh_id>/<comp_id>'.")
-            return 
-        
-        
-        # Déléguer tout le traitement logique, stockage de données et calcul de moyennes au processeur
-        result = process_raw_sensor_message(gh_id, comp_id, data)
-=======
-    # Si c'est un message brut provenant d'un capteur ou d'un simulateur
+    gh_id = None
+    comp_id = None
+    parsed_data = None
+
     if msg.topic.startswith('nsele/raw_sensors/'):
-        # Normalisation des clés contenant des slashes (ex: "S1/C1/TA" -> "S1C1TA")
-        if isinstance(data, dict):
-            data = {k.replace('/', ''): v for k, v in data.items()}
-
-        # Exemple de topic attendu : nsele/raw_sensors/S1/C1
         parts = msg.topic.split('/')
+        print(parts)
         if len(parts) >= 4:
             gh_id = parts[2]
             comp_id = parts[3]
-            
-            # Déléguer tout le traitement logique, stockage de données et calcul de moyennes au processeur
-            result = process_raw_sensor_message(gh_id, comp_id, data)
->>>>>>> Stashed changes
+        else:
+            print(f"Format de topic inattendu : {msg.topic}. Attendu 'nsele/raw_sensors/<gh_id>/<comp_id>'.")
 
-            # Si le processeur décide d'activer un actionneur global pour la serre
-            if result.get('command'):
-                actuator_topic = f"nsele/actuators/{gh_id}"
-                client.publish(actuator_topic, json.dumps(result['command']))
-                print(f"[DECISION BACKEND MOYENNES] Commande envoyee sur {actuator_topic} : {result['command']}")
+    if gh_id and comp_id and isinstance(data, dict):
+        if len(data) == 1 and isinstance(next(iter(data.values())), dict):
+            data = next(iter(data.values()))
 
-            # Republier la donnée brute validée sur le topic écouté par le frontend
-            processed_topic = msg.topic.replace("nsele/raw_sensors/", "nsele/sensors/")
-            client.publish(processed_topic, json.dumps(data), retain=True)
-            print(f"[ROUTAGE BACKEND] Donnee brute recue sur {msg.topic} -> Transmise au Frontend sur {processed_topic}")
+        if all(isinstance(k, str) and k.lower() in {'ta', 'ts', 'ha', 'hs'} for k in data.keys()):
+            parsed_data = {f"{gh_id}{comp_id}{k.lower()}": v for k, v in data.items()}
+        else:
+            parsed_data = data
 
-            # Publier aussi les moyennes calculées par le processeur pour le Dashboard
-            if result.get('averages'):
-                avg_topic = f"nsele/sensors/{gh_id}/averages"
-                client.publish(avg_topic, json.dumps(result['averages']), retain=True)
-                print(f"[MOYENNES BACKEND] Moyennes de la serre {gh_id} publiees sur {avg_topic} : {result['averages']}")
+    if gh_id and comp_id and isinstance(parsed_data, dict):
+        result = process_raw_sensor_message(gh_id, comp_id, parsed_data)
 
-    # Pour tout message sous nsele/sensors/ ou nsele/actuators/, on le diffuse via SSE
+        if result.get('command'):
+            actuator_topic = f"nsele/actuators/{gh_id}"
+            client.publish(actuator_topic, json.dumps(result['command']))
+            print(f"[DECISION BACKEND MOYENNES] Commande envoyee sur {actuator_topic} : {result['command']}")
+
+        processed_topic = msg.topic.replace('nsele/raw_sensors/', 'nsele/sensors/')
+        client.publish(processed_topic, json.dumps(parsed_data), retain=True)
+        print(f"[ROUTAGE BACKEND] Donnee brute recue sur {msg.topic} -> Transmise au Frontend sur {processed_topic}")
+
+        if result.get('averages'):
+            avg_topic = f"nsele/sensors/{gh_id}/averages"
+            client.publish(avg_topic, json.dumps(result['averages']), retain=True)
+            print(f"[MOYENNES BACKEND] Moyennes de la serre {gh_id} publiees sur {avg_topic} : {result['averages']}")
+
     if msg.topic.startswith('nsele/sensors/') or msg.topic.startswith('nsele/actuators/'):
         broadcast_sensor_data(msg.topic, data)
 
