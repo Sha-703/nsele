@@ -52,20 +52,45 @@ function populateGreenhouseSelect() {
     updateSelectedGreenhouseInfo();
 }
 
-// Update displayed crop
-function updateSelectedGreenhouseInfo() {
+// Récupérer le dernier état des actionneurs depuis le backend
+async function fetchLatestActuatorState(ghId) {
+    try {
+        const response = await fetch(`/api/greenhouses/${ghId}/latest-state`);
+        if (!response.ok) throw new Error("Erreur de récupération de l'état des actionneurs");
+        const state = await response.json();
+        
+        console.log("📥 Derniers états d'actionneurs reçus :", state.actuators);
+        
+        if (state.actuators) {
+            if (state.actuators.pump !== undefined) {
+                updateActuatorBadge('pump', state.actuators.pump);
+            }
+            if (state.actuators.cooling !== undefined) {
+                updateActuatorBadge('cooling', state.actuators.cooling);
+            }
+        }
+    } catch (err) {
+        console.warn("⚠️ Impossible de charger l'état initial des actionneurs :", err);
+        // Valeurs par défaut en cas d'erreur
+        updateActuatorBadge('pump', 'off');
+        updateActuatorBadge('cooling', 'off');
+    }
+}
+
+// Mettre à jour les informations et l'état de la serre sélectionnée
+async function updateSelectedGreenhouseInfo() {
     const gh = greenhouses.find(g => g.id === selectedGhId);
     if (gh) {
         cultureNameEl.textContent = gh.culture;
     } else {
         cultureNameEl.textContent = '--';
     }
-    // On reset les badges au chargement de la serre car l'état réel viendra de MQTT
-    updateActuatorBadge('pump', 'off');
-    updateActuatorBadge('cooling', 'off');
+    
+    // Charger le dernier état réel connu des actionneurs
+    await fetchLatestActuatorState(selectedGhId);
 }
 
-// Dropdown change handler
+// Gestionnaire de changement de sélection de serre
 ghSelect.onchange = (e) => {
     selectedGhId = e.target.value;
     updateSelectedGreenhouseInfo();
@@ -112,22 +137,22 @@ async function sendActuatorCommand(actuator, state) {
     }
 }
 
-// Connect to MQTT to update states in real-time
-function initMQTT() {
-    console.log("Connexion au broker MQTT...");
-    const client = mqtt.connect('ws://localhost:9001');
+// Connect to Flask SSE stream instead of MQTT WS to update states in real-time
+function initSSE() {
+    console.log("Connexion au flux de données temps réel SSE...");
+    const eventSource = new EventSource('/api/stream');
 
-    client.on('connect', () => {
-        console.log('MQTT Connecté au broker pour la page de commandes.');
-        client.subscribe('nsele/actuators/#');
-    });
-
-    client.on('message', (topic, payload) => {
+    eventSource.onmessage = (event) => {
         try {
-            const msg = JSON.parse(payload.toString());
+            const data = JSON.parse(event.data);
+            if (!data || !data.topic || !data.payload) return;
+
+            const topic = data.topic;
+            const msg = data.payload;
+
             // Exemple topic : nsele/actuators/S1 ou nsele/actuators/S1/C1
             const parts = topic.split('/');
-            if (parts.length >= 3) {
+            if (parts.length >= 3 && topic.startsWith('nsele/actuators/')) {
                 const ghId = parts[2];
                 // Si la commande concerne la serre activement sélectionnée
                 if (ghId === selectedGhId) {
@@ -140,13 +165,13 @@ function initMQTT() {
                 }
             }
         } catch (e) {
-            console.warn("Erreur parsing MQTT payload:", e);
+            console.warn("Erreur parsing message SSE:", e);
         }
-    });
+    };
 
-    client.on('error', (err) => {
-        console.error('MQTT Erreur de connexion:', err);
-    });
+    eventSource.onerror = (err) => {
+        console.error("Erreur de connexion SSE:", err);
+    };
 }
 
 // Attach functions to window namespace so inline onclick calls work
@@ -155,5 +180,5 @@ window.sendActuatorCommand = sendActuatorCommand;
 // Start
 window.onload = () => {
     fetchGreenhouses();
-    initMQTT();
+    initSSE();
 };

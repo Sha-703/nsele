@@ -6,8 +6,6 @@
     <title>Nsele - Serre Connectée</title>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- MQTT.js -->
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <!-- Styles custom -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -21,6 +19,7 @@
             <nav>
                 <a href="/" style="text-decoration: underline; color: white;">Dashboard</a>
                 <a href="/commande">Commandes</a>
+                <a href="/history">Historique</a>
                 <a href="/settings">Paramètres</a>
             </nav>
         </header>

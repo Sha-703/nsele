@@ -69,3 +69,45 @@ def delete_comp(gh_id, comp_id):
     if delete_compartment(gh_id, comp_id):
         return jsonify({'status': 'deleted'})
     return jsonify({'error': 'Compartiment introuvable'}), 404
+
+# Endpoint: Récupérer le dernier état connu (capteurs, moyennes et actionneurs) d'une serre
+@bp.route('/api/greenhouses/<gh_id>/latest-state', methods=['GET'])
+def get_latest_state(gh_id):
+    from backend.processing.processor import latest_sensor_data, latest_averages, latest_actuator_states
+
+    # Filtrer et structurer les données brutes des compartiments appartenant à cette serre
+    comps_data = {}
+    for key, val in latest_sensor_data.items():
+        # La clé est sous la forme "gh_id/comp_id" (ex: "S1/C1")
+        if key.startswith(f"{gh_id}/"):
+            try:
+                comp_id = key.split('/')[1]
+                comps_data[comp_id] = val
+            except IndexError:
+                pass
+
+    # Récupérer les moyennes de la serre
+    averages = latest_averages.get(gh_id, {
+        'greenhouse': gh_id,
+        'TA': '--',
+        'TS': '--',
+        'HA': '--',
+        'HS': '--'
+    })
+
+    # Récupérer le dernier état connu des actionneurs
+    actuators = latest_actuator_states.get(gh_id, {
+        'pump': 'off',
+        'cooling': 'off'
+    })
+
+    # Récupérer l'historique des moyennes pour le graphique
+    from backend.processing.processor import averages_history
+    history = averages_history.get(gh_id, [])
+
+    return jsonify({
+        'sensor_data': comps_data,
+        'averages': averages,
+        'actuators': actuators,
+        'history': history
+    })

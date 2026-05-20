@@ -5,6 +5,7 @@ let mqttData = {};
 let history = [];
 let chartInstance = null;
 let chartInterval = null;
+let mqttClient = null;  // Client MQTT global
 
 // Elements
 const greenhouseBar = document.getElementById('greenhouse-bar');
@@ -106,11 +107,57 @@ function renderGreenhouseBar() {
     });
 }
 
-// Select Greenhouse
-function selectGreenhouse(id) {
+// Récupérer le dernier état connu depuis le backend
+async function fetchLatestState(ghId) {
+    try {
+        const response = await fetch(`/api/greenhouses/${ghId}/latest-state`);
+        if (!response.ok) throw new Error("Erreur lors de la récupération de l'état");
+        const state = await response.json();
+        
+        console.log("📥 Dernier état connu reçu :", state);
+        
+        // Charger les dernières données brutes des capteurs dans mqttData
+        if (state.sensor_data) {
+            Object.keys(state.sensor_data).forEach(compId => {
+                const compSensors = state.sensor_data[compId];
+                // compSensors est sous la forme {"TA": 24.5, "TS": 20.1, ...}
+                // On doit reconstruire la clé composite attendue par le frontend (ex: S1C1TA)
+                Object.keys(compSensors).forEach(sensor => {
+                    const key = `${ghId}${compId}${sensor}`;
+                    mqttData[key] = compSensors[sensor];
+                });
+            });
+        }
+        
+        // Rafraîchir l'affichage des compartiments
+        refreshSensorUI();
+        
+        // Mettre à jour l'affichage des moyennes
+        if (state.averages) {
+            updateAveragesUI(state.averages);
+        }
+
+        // Charger l'historique des moyennes pour le graphique
+        if (state.history && state.history.length > 0) {
+            history = state.history.map(h => ({
+                time: h.time,
+                TA: h.TA,
+                TS: h.TS,
+                HA: h.HA,
+                HS: h.HS
+            }));
+            renderChartUI();
+        }
+    } catch (err) {
+        console.warn("⚠️ Impossible de charger l'état initial :", err);
+    }
+}
+
+// Sélectionner une serre
+async function selectGreenhouse(id) {
     selectedId = id;
     
-    // Highlight in bar
+    // Mettre en surbrillance dans la barre de sélection
     document.querySelectorAll('.gh-item').forEach((item, index) => {
         if (greenhouses[index].id === selectedId) {
             item.classList.add('selected');
@@ -125,21 +172,24 @@ function selectGreenhouse(id) {
         ghCulture.textContent = currentGh.culture;
     }
 
-    // Reset averages elements
+    // Réinitialiser les éléments de moyennes
     updateDOMVal('avg-TA', '--');
     updateDOMVal('avg-TS', '--');
     updateDOMVal('avg-HA', '--');
     updateDOMVal('avg-HS', '--');
 
-    // Render compartments
+    // Afficher les compartiments
     renderCompartments();
     
-    // Clear chart history and restart intervals
+    // Réinitialiser l'historique du graphique et redémarrer les intervalles
     history = [];
     if (chartInterval) clearInterval(chartInterval);
     initChart();
     
-    // Chart loop
+    // Charger le dernier état connu depuis le serveur
+    await fetchLatestState(selectedId);
+    
+    // Boucle de mise à jour du graphique
     chartInterval = setInterval(updateChartData, 2500);
 }
 
@@ -252,7 +302,19 @@ function updateAveragesUI(msg) {
     updateDOMVal('avg-HS', msg.HS !== undefined ? msg.HS : '--');
 }
 
-// Update Chart Data (Average of all compartments)
+// Rafraîchir l'affichage du graphique à partir de l'historique en mémoire
+function renderChartUI() {
+    if (chartInstance) {
+        chartInstance.data.labels = history.map(h => h.time);
+        chartInstance.data.datasets[0].data = history.map(h => h.TA);
+        chartInstance.data.datasets[1].data = history.map(h => h.TS);
+        chartInstance.data.datasets[2].data = history.map(h => h.HA);
+        chartInstance.data.datasets[3].data = history.map(h => h.HS);
+        chartInstance.update();
+    }
+}
+
+// Mettre à jour les données du graphique (Moyenne de tous les compartiments)
 function updateChartData() {
     const currentGh = greenhouses.find(g => g.id === selectedId);
     const comps = currentGh && currentGh.compartments ? currentGh.compartments : [];
@@ -278,7 +340,7 @@ function updateChartData() {
     if (count > 0) {
         pt = { time: timeStr, TA: TA / count, TS: TS / count, HA: HA / count, HS: HS / count };
     } else {
-        // Dummy fallback to keep graph moving if no live messages
+        // Fallback pour faire bouger le graphique s'il n'y a pas encore de données reçues
         pt = { 
             time: timeStr, 
             TA: 26 + Math.random() * 2, 
@@ -293,32 +355,23 @@ function updateChartData() {
         history.shift();
     }
 
-    // Update Chart.js Instance
-    if (chartInstance) {
-        chartInstance.data.labels = history.map(h => h.time);
-        chartInstance.data.datasets[0].data = history.map(h => h.TA);
-        chartInstance.data.datasets[1].data = history.map(h => h.TS);
-        chartInstance.data.datasets[2].data = history.map(h => h.HA);
-        chartInstance.data.datasets[3].data = history.map(h => h.HS);
-        chartInstance.update();
-    }
+    renderChartUI();
 }
 
-// Connect to MQTT Broker via Websockets on 9001
-function initMQTT() {
-    console.log("Connexion au broker MQTT...");
-    const client = mqtt.connect('ws://localhost:9001');
+// Connect to Flask SSE stream instead of MQTT WS
+function initSSE() {
+    console.log("Connexion au flux de données temps réel SSE...");
+    const eventSource = new EventSource('/api/stream');
 
-    client.on('connect', () => {
-        console.log('MQTT Connecté au broker.');
-        client.subscribe('nsele/sensors/#');
-        client.subscribe('nsele/actuators/#');
-    });
-
-    client.on('message', (topic, payload) => {
+    eventSource.onmessage = (event) => {
         try {
-            const msg = JSON.parse(payload.toString());
-            console.log(`MQTT Recu sur [${topic}]:`, msg);
+            const data = JSON.parse(event.data);
+            if (!data || !data.topic || !data.payload) return;
+
+            const topic = data.topic;
+            const msg = data.payload;
+            
+            console.log(`✅ Message reçu via SSE [${topic}]:`, msg);
             
             const parts = topic.split('/');
             if (parts.length >= 4 && parts[3] === 'averages') {
@@ -326,23 +379,23 @@ function initMQTT() {
                 if (ghId === selectedId) {
                     updateAveragesUI(msg);
                 }
-                return; // Ne pas mélanger avec les données brutes de compartiments
+                return;
             }
 
             mqttData = { ...mqttData, ...msg };
             refreshSensorUI();
         } catch (e) {
-            console.warn("Erreur parsing MQTT payload:", e);
+            console.warn("❌ Erreur parsing message SSE:", e);
         }
-    });
+    };
 
-    client.on('error', (err) => {
-        console.error('MQTT Erreur de connexion:', err);
-    });
+    eventSource.onerror = (err) => {
+        console.error("❌ Erreur de connexion SSE:", err);
+    };
 }
 
 // Start
 window.onload = () => {
     fetchGreenhouses();
-    initMQTT();
+    initSSE();
 };

@@ -24,13 +24,32 @@ def send_command(gh_id):
     client.publish(topic, payload)
     print(f"[COMMANDE BACKEND] Commande recue via API pour {topic} -> Publiee sur MQTT : {command}")
 
+    # Mettre à jour l'état de l'actionneur dans la mémoire globale
+    from backend.processing.processor import latest_actuator_states
+    if gh_id not in latest_actuator_states:
+        latest_actuator_states[gh_id] = {'pump': 'off', 'cooling': 'off'}
+    
+    from backend.models.history_db import log_actuator_event
+    for act, val in command.items():
+        if act in ['pump', 'cooling']:
+            old_state = latest_actuator_states[gh_id].get(act)
+            if old_state != val:
+                latest_actuator_states[gh_id][act] = val
+                log_actuator_event(gh_id, act, val)
+
     return jsonify({
         'status': 'sent',
         'topic': topic,
         'command': command
     })
 
-# Endpoint: Consulter l'état de l'actionneur (temporaire/simulé)
+# Endpoint: Consulter l'état des actionneurs réels en mémoire
 @bp.route('/api/actuators/<gh_id>/state', methods=['GET'])
 def actuator_state(gh_id):
-    return jsonify({'id': gh_id, 'pump': 'off', 'vent': 'auto'})
+    from backend.processing.processor import latest_actuator_states
+    state = latest_actuator_states.get(gh_id, {'pump': 'off', 'cooling': 'off'})
+    return jsonify({
+        'id': gh_id,
+        'pump': state.get('pump', 'off'),
+        'cooling': state.get('cooling', 'off')
+    })
