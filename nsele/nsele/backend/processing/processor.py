@@ -28,7 +28,7 @@ def load_latest_sensor_data_from_json() -> dict:
 
     try:
         with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data = json.load(f) # lire les valeur des sauvegarder 
         if not isinstance(data, dict):
             return {}
 
@@ -36,6 +36,7 @@ def load_latest_sensor_data_from_json() -> dict:
         for target, values in data.items():
             if not isinstance(values, dict):
                 continue
+            
             result[target] = {}
             for sensor, val in values.items():
                 if sensor in ['ta', 'ts', 'ha', 'hs']:

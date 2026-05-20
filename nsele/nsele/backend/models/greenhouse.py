@@ -1,100 +1,187 @@
-from backend.models.db import load_data, save_data
+﻿import sqlite3
+from backend.models.db import load_data
+from backend.models.database import get_db_connection, initialize_database
+
+# Ce module gère les opérations CRUD des serres dans la base SQLite.
+# Le JSON est conservé uniquement pour l'initialisation.
+
+
+def _get_culture_display_name(culture_id: str) -> str:
+    """Retourne le nom lisible de la culture depuis SQLite."""
+    if not culture_id:
+        return ''
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT description FROM cultures WHERE nom = ?", (culture_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row['description'] if row and row['description'] else culture_id
+
+
+def _get_compartments_for_greenhouse(gh_id: str) -> list:
+    """Récupère les compartiments enregistrés pour une serre."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT compartment FROM serre_compartments WHERE serre_nom = ? ORDER BY compartment", (gh_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [row['compartment'] for row in rows] if rows else ["C1", "C2", "C3", "C4"]
+
 
 def get_all_greenhouses():
-    """
-    Récupère la liste de toutes les serres.
-    Résout le nom de la culture correspondante et injecte les compartiments par défaut si absents.
-    """
-    data = load_data()
-    # Création d'un dictionnaire pour associer l'ID de la culture à son nom
-    cultures_dict = {c['id']: c['name'] for c in data.get('cultures', [])}
+    """Récupère toutes les serres depuis la base SQLite."""
+    initialize_database()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nom, description, culture_id FROM serres ORDER BY nom")
+    rows = cursor.fetchall()
+    conn.close()
+
     result = []
-    for g in data.get('greenhouses', []):
-        g_copy = g.copy()
-        # Remplacement de l'identifiant par le nom lisible de la culture
-        g_copy['culture'] = cultures_dict.get(g['culture'], g['culture'])
-        g_copy['culture_id'] = g['culture']  # Conserver l'identifiant brut pour les liaisons
-        g_copy['compartments'] = g.get('compartments', ["C1", "C2", "C3", "C4"])
-        result.append(g_copy)
+    for row in rows:
+        culture_id = row['culture_id']
+        result.append({
+            'id': row['nom'],
+            'name': row['description'] or row['nom'],
+            'culture': _get_culture_display_name(culture_id),
+            'culture_id': culture_id,
+            'status': 'OK',
+            'compartments': _get_compartments_for_greenhouse(row['nom'])
+        })
     return result
 
+
+def _fetch_greenhouse(gh_id: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nom, description, culture_id FROM serres WHERE nom = ?", (gh_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
 def create_greenhouse(gh_id, name, culture_id):
-    """
-    Enregistre une nouvelle serre dans le fichier JSON.
-    Vérifie les doublons sur l'ID de la serre.
-    """
-    data = load_data()
-    # Vérification d'unicité
-    for g in data.get('greenhouses', []):
-        if g['id'] == gh_id:
-            return None
-            
-    new_gh = {
+    """Crée une nouvelle serre dans la base SQLite."""
+    initialize_database()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM serres WHERE nom = ?", (gh_id,))
+    if cursor.fetchone() is not None:
+        conn.close()
+        return None
+
+    cursor.execute(
+        "INSERT INTO serres (nom, description, culture_id, compartiment) VALUES (?, ?, ?, ?)",
+        (gh_id, name, culture_id, 4)
+    )
+    for comp in ["C1", "C2", "C3", "C4"]:
+        cursor.execute(
+            "INSERT OR IGNORE INTO serre_compartments (serre_nom, compartment) VALUES (?, ?)",
+            (gh_id, comp)
+        )
+    conn.commit()
+    conn.close()
+
+    return {
         'id': gh_id,
         'name': name,
-        'culture': culture_id,
+        'culture': _get_culture_display_name(culture_id),
+        'culture_id': culture_id,
         'status': 'OK',
-        'compartments': ["C1", "C2", "C3", "C4"] # Compartiments initiaux par défaut
+        'compartments': ["C1", "C2", "C3", "C4"]
     }
-    data['greenhouses'].append(new_gh)
-    save_data(data)
-    return new_gh
+
 
 def update_greenhouse(gh_id, update_data):
-    """
-    Met à jour le nom ou la culture assignée à une serre existante.
-    """
-    data = load_data()
-    for g in data.get('greenhouses', []):
-        if g['id'] == gh_id:
-            if 'culture' in update_data:
-                g['culture'] = update_data['culture']
-            if 'name' in update_data:
-                g['name'] = update_data['name']
-            save_data(data)
-            return g
-    return None
+    """Met à jour le nom ou la culture d'une serre existante."""
+    initialize_database()
+    row = _fetch_greenhouse(gh_id)
+    if row is None:
+        return None
+
+    updates = []
+    params = []
+    if 'culture' in update_data:
+        updates.append('culture_id = ?')
+        params.append(update_data['culture'])
+    if 'name' in update_data:
+        updates.append('description = ?')
+        params.append(update_data['name'])
+    if not updates:
+        return {
+            'id': row['nom'],
+            'name': row['description'] or row['nom'],
+            'culture': _get_culture_display_name(row['culture_id']),
+            'culture_id': row['culture_id'],
+            'status': 'OK',
+            'compartments': _get_compartments_for_greenhouse(row['nom'])
+        }
+
+    params.append(gh_id)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"UPDATE serres SET {', '.join(updates)} WHERE nom = ?", params)
+    conn.commit()
+    conn.close()
+
+    updated = _fetch_greenhouse(gh_id)
+    return {
+        'id': updated['nom'],
+        'name': updated['description'] or updated['nom'],
+        'culture': _get_culture_display_name(updated['culture_id']),
+        'culture_id': updated['culture_id'],
+        'status': 'OK',
+        'compartments': _get_compartments_for_greenhouse(updated['nom'])
+    }
+
 
 def delete_greenhouse(gh_id):
-    """
-    Retire définitivement une serre du fichier JSON.
-    """
-    data = load_data()
-    initial_len = len(data.get('greenhouses', []))
-    data['greenhouses'] = [g for g in data.get('greenhouses', []) if g['id'] != gh_id]
-    if len(data['greenhouses']) < initial_len:
-        save_data(data)
-        return True
-    return False
+    """Supprime une serre et ses compartiments associés."""
+    initialize_database()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM serre_compartments WHERE serre_nom = ?", (gh_id,))
+    cursor.execute("DELETE FROM serres WHERE nom = ?", (gh_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
 
 def add_compartment(gh_id, comp_id):
-    """
-    Ajoute un compartiment à la liste des compartiments actifs d'une serre.
-    """
-    data = load_data()
-    for g in data.get('greenhouses', []):
-        if g['id'] == gh_id:
-            comps = g.get('compartments', ["C1", "C2", "C3", "C4"])
-            comp_id = comp_id.upper().strip()
-            if comp_id not in comps:
-                comps.append(comp_id)
-                g['compartments'] = comps
-                save_data(data)
-                return True
-    return False
+    """Ajoute un compartiment à une serre."""
+    initialize_database()
+    comp_id = comp_id.upper().strip()
+    if not comp_id:
+        return False
+
+    if _fetch_greenhouse(gh_id) is None:
+        return False
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM serre_compartments WHERE serre_nom = ? AND compartment = ?", (gh_id, comp_id))
+    if cursor.fetchone() is not None:
+        conn.close()
+        return False
+
+    cursor.execute("INSERT INTO serre_compartments (serre_nom, compartment) VALUES (?, ?)", (gh_id, comp_id))
+    cursor.execute("UPDATE serres SET compartiment = (SELECT COUNT(*) FROM serre_compartments WHERE serre_nom = ?) WHERE nom = ?", (gh_id, gh_id))
+    conn.commit()
+    conn.close()
+    return True
+
 
 def delete_compartment(gh_id, comp_id):
-    """
-    Supprime un compartiment spécifique de la serre.
-    """
-    data = load_data()
-    for g in data.get('greenhouses', []):
-        if g['id'] == gh_id:
-            comps = g.get('compartments', ["C1", "C2", "C3", "C4"])
-            comp_id = comp_id.upper().strip()
-            if comp_id in comps:
-                comps.remove(comp_id)
-                g['compartments'] = comps
-                save_data(data)
-                return True
-    return False
+    """Supprime un compartiment d'une serre."""
+    initialize_database()
+    comp_id = comp_id.upper().strip()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM serre_compartments WHERE serre_nom = ? AND compartment = ?", (gh_id, comp_id))
+    deleted = cursor.rowcount > 0
+    if deleted:
+        cursor.execute("UPDATE serres SET compartiment = (SELECT COUNT(*) FROM serre_compartments WHERE serre_nom = ?) WHERE nom = ?", (gh_id, gh_id))
+    conn.commit()
+    conn.close()
+    return deleted
