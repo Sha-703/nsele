@@ -20,13 +20,19 @@ def on_message(client, userdata, msg):
 
     # Normalisation des clés contenant des slashes (ex: "S1/C1/TA" -> "S1C1TA")
     if isinstance(data, dict):
-        data = {k.replace('/', ''): v for k, v in data.items()} # creation d'une nouvelle dict avec les clés normalisées 
+        data = {k.replace("/",'') : v for k, v in data.items()} # creation d'une nouvelle dict avec les clés normalisées 
 
-    # Exemple de topic attendu : {"s1/c1":{"ta": 25.5, "hu": 60.2,"ts":20.0,"hs":55.0}}"}
-    parts = msg.topic.split('/')
-    if len(parts) >= 2:
-        gh_id = parts[2]
-        comp_id = parts[3]
+        # Exemple de topic attendu : {"s1/c1":{"ta": 25.5, "hu": 60.2,"ts":20.0,"hs":55.0}"}}
+        
+        clef = list(data.keys())[0] # Extrait la clé principale du message (ex: "s1/c1")
+        parts = clef.split('/') # Sépare la clé en parties (ex: ["s1", "c1"])
+        if len(parts) > 2:
+            gh_id = parts[0] # Extrait l'identifiant de la serre (ex: "s1")
+            comp_id = parts[1] # Extrait l'identifiant du compartiment (ex: "c1")
+        else:
+            print(f"Format de topic inattendu : {msg.topic}. Attendu 'nsele/raw_sensors/<gh_id>/<comp_id>'.")
+            return 
+        
         
         # Déléguer tout le traitement logique, stockage de données et calcul de moyennes au processeur
         result = process_raw_sensor_message(gh_id, comp_id, data)
