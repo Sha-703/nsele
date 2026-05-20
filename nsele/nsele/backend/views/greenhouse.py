@@ -122,4 +122,26 @@ def greenhouse_list_page():
 # Route de page: afficher le détail d'une serre via son template dédié
 @bp.route('/greenhouse/<gh_id>', methods=['GET'])
 def greenhouse_detail_page(gh_id):
-    return render_template('greenhouse_detail.html', gh_id=gh_id)
+    # Construire l'état initial à afficher dans la page détail
+    from backend.processing.processor import latest_sensor_data, latest_averages, latest_actuator_states, averages_history
+
+    comps_data = {}
+    for key, val in latest_sensor_data.items():
+        if key.startswith(f"{gh_id}/"):
+            try:
+                comp_id = key.split('/')[1]
+                comps_data[comp_id] = val
+            except IndexError:
+                pass
+
+    averages = latest_averages.get(gh_id, {'greenhouse': gh_id, 'ta': '--', 'ts': '--', 'ha': '--', 'hs': '--'})
+    actuators = latest_actuator_states.get(gh_id, {'pump': 'off', 'cooling': 'off'})
+    history = averages_history.get(gh_id, [])
+
+    return render_template(
+        'greenhouse_detail.html', gh_id=gh_id,
+        sensor_data=comps_data,
+        averages=averages,
+        actuators=actuators,
+        history=history
+    )
