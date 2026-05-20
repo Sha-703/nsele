@@ -49,7 +49,7 @@ def load_latest_sensor_data_from_json() -> dict:
         return {}
 
 
-def save_latest_sensor_data_to_json() -> None:
+def save_latest_sensor_data_to_json() -> None: # Sauvegarde les dernières valeurs de capteurs dans un fichier JSON local pour persistance
     path = get_latest_sensor_file_path()
     try:
         with latest_sensor_lock:
